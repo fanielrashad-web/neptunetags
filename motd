@@ -1,710 +1,657 @@
+import json
 import requests
 import random
-import json
-import os
 import base64
-import hashlib
+import string
+import uuid
+import time
 from flask import Flask, jsonify, request, Response
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-OCULUS_APP_ID = "1368878832972597"
-OCULUS_APP_SECRET = "d671be382b99a69777de71c1480a4c39"
-MINIMUM_ACCOUNT_AGE_DAYS = 7
-MINIMUM_PURCHASE_AGE_DAYS = 1
-MINIMUM_FRIENDS_COUNT = 1
-MINIMUM_TOTAL_APPS = 2
-ALLOWED_ACQUISITION_TYPES = ["store_purchase", "store", "purchase"]
-UNITY_USER_AGENT = "UnityPlayer/2022.3.2f1 (UnityWebRequest/1.0, libcurl/7.84.0-DEV)"
-UNITY_VERSION = "2022.3.2f1"
-REQUIRED_PLATFORM = "Quest"
-REQUIRED_APP_VERSION = "5223"
+WEBHOOK_FAILED_ATTESTATION = "https://discord.com/api/webhooks/1556059426182664274/QYzeDVlfI7BhrhXie5KmHuyCHy-bHgA062_uvFLqMXvI5GMghPs0PrdsiWuL1QPG5QIa"
+WEBHOOK_SUCCESS_ATTESTATION = "https://discord.com/api/webhooks/1539096182159187988/BS0FYs4KRuwRRfxtiOu7LDSPPDxiQv9A0yPzHY0nyxo0ab_zPtCBdoDJ1Xc5di3zyZ1l"
+WEBHOOK_FAILED_ORGSCOPE = "https://discord.com/api/webhooks/1556059573826101381/_Z4OOT4BGcFzURSKbS4R8vHe6B791OZBdDhMScRs31jW6R2R6DHi3qrx5CJciL664Jca"
+WEBHOOK_SUCCESS_ORGSCOPE = "https://discord.com/api/webhooks/1556059749693526044/ja7FQQRbDQgoWuDIrYA0R2FVkm7SJCdgCqUEN2LfryFFQ484LEeEKZtIXhfONlzhFYan"
+WEBHOOK_ATTEST_NONCE_LOGS = "https://discord.com/api/webhooks/1556059866106175538/xQZrNtDKBhvuKH_wSLnjN6fawZpruoXxDX-dZhgfxyStOwvB8q7XqbX224XDen7Npzet"
 
 class GameInfo:
-    def __init__(self):
-        self.TitleId: str = "87F0E"
+    def __init__(self) -> None:
+        self.TitleId:   str = "87F0E"
         self.SecretKey: str = "I43389NRMNNTXKY5QGGUYRSEXO4E8ZT86OE381O9CH431PCP3S"
-        self.ApiKeys: list[str] = [
-            "OC|1368878832972597|d671be382b99a69777de71c1480a4c39"
-        ]
+        self.AppCreds:  str = "OC|1368878832972597|d671be382b99a69777de71c1480a4c39"
+        self.OculusAppId: str = "1368878832972597"
+        self.EntitlementCheck: bool = True
 
-    def headers(self):
-        return {"Content-Type": "application/json", "X-SecretKey": self.SecretKey}
+    def GetAuthHeaders(self) -> dict[str, str]:
+        return {
+            "content-type": "application/json",
+            "X-SecretKey":  self.SecretKey
+        }
+
+    def GetTitle(self) -> str:
+        return self.TitleId
 
 settings = GameInfo()
 app = Flask(__name__)
-
-@app.before_request
-def before_all_requests():
-    print(request.headers.get("X-Real-Ip"))
-
-@app.route("/api/PlayFabAuthentication", methods=["POST"])
-def PlayFabAuthentication():
-    rjson = request.get_json()
-    oculus_id = rjson.get("OculusId")
-    nonce = rjson.get("Nonce")
-    title = rjson.get("AppId")
-    platform = rjson.get("Platform")
-    app_ver = rjson.get("AppVersion", "")
-    custom_id = rjson.get("CustomId")
-    print(rjson)
-
-    if request.headers.get("User-Agent") != UNITY_USER_AGENT or request.headers.get("X-Unity-Version") != UNITY_VERSION:
-        return "", 404
-    if title != settings.TitleId:
-        return "", 404
-    if platform != REQUIRED_PLATFORM:
-        return "", 404
-    if app_ver != REQUIRED_APP_VERSION:
-        return "", 404
-
-    if not all([title, nonce, platform, oculus_id]) or platform != REQUIRED_PLATFORM:
-        return "", 404
-
-    graph_user = None
-    validated_api_key = None
-    org_scoped_id = None
-
-    for api_key in settings.ApiKeys:
-        try:
-            print(f"trying api key {api_key}...")
-
-            nonce_response = requests.post(
-                "https://graph.oculus.com/user_nonce_validate",
-                params={
-                    "access_token": api_key,
-                    "nonce": nonce,
-                    "user_id": oculus_id
-                },
-                timeout=10
-            )
-
-            if nonce_response.status_code != 200:
-                print(f"nonce validation failed with api key {api_key}, trying next...")
-                continue
-
-            entitlement_response = requests.post(
-                "https://graph.oculus.com/check_app_user_entitlement",
-                params={
-                    "access_token": api_key,
-                    "user_id": oculus_id
-                },
-                timeout=10
-            )
-
-            if entitlement_response.status_code != 200:
-                print(f"entitlement check failed with api key {api_key}, trying next...")
-                continue
-
-            entitlement_data = entitlement_response.json()
-            if not entitlement_data.get("is_entitled", False):
-                print(f"user not entitled with api key {api_key}, trying next...")
-                continue
-
-            auth_response = requests.post(
-                "https://graph.oculus.com/authenticate_application_user",
-                params={
-                    "access_token": api_key,
-                    "nonce": nonce,
-                    "user_id": oculus_id
-                },
-                timeout=10
-            )
-
-            if auth_response.status_code != 200:
-                print(f"authentication failed with api key {api_key}, trying next...")
-                continue
-
-            entitlements_response = requests.get(
-                "https://graph.oculus.com/user_entitlements",
-                params={
-                    "access_token": api_key,
-                    "user_id": oculus_id
-                },
-                timeout=10
-            )
-
-            if entitlements_response.status_code != 200:
-                print(f"failed to get user entitlements with api key {api_key}, trying next...")
-                continue
-
-            entitlements_data = entitlements_response.json()
-            app_owned = False
-            for entitlement in entitlements_data.get("data", []):
-                if entitlement.get("id") == title or entitlement.get("application", {}).get("id") == title:
-                    app_owned = True
-                    break
-
-            if not app_owned:
-                print(f"user does not own app in entitlements list with api key {api_key}, trying next...")
-                continue
-
-            org_scoped_response = requests.get(
-                f"https://graph.oculus.com/{oculus_id}/organization_scoped_user_id",
-                params={
-                    "access_token": api_key
-                },
-                timeout=10
-            )
-
-            if org_scoped_response.status_code != 200:
-                print(f"failed to get org scoped id with api key {api_key}, trying next...")
-                continue
-
-            org_scoped_data = org_scoped_response.json()
-            org_scoped_id = org_scoped_data.get("org_scoped_id")
-
-            if not org_scoped_id:
-                print(f"org scoped id not found with api key {api_key}, trying next...")
-                continue
-
-            nonce_org_response = requests.post(
-                "https://graph.oculus.com/user_nonce_validate",
-                params={
-                    "access_token": api_key,
-                    "nonce": nonce,
-                    "user_id": org_scoped_id
-                },
-                timeout=10
-            )
-
-            if nonce_org_response.status_code != 200:
-                print(f"nonce validation with org scoped id failed with api key {api_key}, trying next...")
-                continue
-
-            entitlement_org_response = requests.post(
-                "https://graph.oculus.com/check_app_user_entitlement",
-                params={
-                    "access_token": api_key,
-                    "user_id": org_scoped_id
-                },
-                timeout=10
-            )
-
-            if entitlement_org_response.status_code != 200:
-                print(f"entitlement check with org scoped id failed with api key {api_key}, trying next...")
-                continue
-
-            entitlement_org_data = entitlement_org_response.json()
-            if not entitlement_org_data.get("is_entitled", False):
-                print(f"user not entitled with org scoped id with api key {api_key}, trying next...")
-                continue
-
-            user_profile_response = requests.get(
-                f"https://graph.oculus.com/{oculus_id}",
-                params={
-                    "access_token": api_key,
-                    "fields": "id,alias,created_time"
-                },
-                timeout=10
-            )
-
-            if user_profile_response.status_code != 200:
-                print(f"failed to get user profile with api key {api_key}, trying next...")
-                continue
-
-            user_profile = user_profile_response.json()
-            account_created_time = user_profile.get("created_time")
-
-            if account_created_time:
-                try:
-                    created_date = datetime.strptime(account_created_time, "%Y-%m-%dT%H:%M:%S%z")
-                    days_old = (datetime.now(created_date.tzinfo) - created_date).days
-
-                    if days_old < MINIMUM_ACCOUNT_AGE_DAYS:
-                        print(f"account too new (created {days_old} days ago) with api key {api_key}")
-                        return jsonify({
-                            "BanMessage": "Your account is too new for us to verify. (~7 days)",
-                            "BanExpirationTime": "Indefinite"
-                        }), 403
-                except Exception as e:
-                    print(f"failed to parse account creation time: {e}")
-
-            devices_response = requests.get(
-                f"https://graph.oculus.com/{oculus_id}/devices",
-                params={
-                    "access_token": api_key
-                },
-                timeout=10
-            )
-
-            if devices_response.status_code != 200:
-                print(f"failed to get user devices with api key {api_key}, trying next...")
-                continue
-
-            devices_data = devices_response.json()
-            has_quest_device = False
-            for device in devices_data.get("data", []):
-                device_type = device.get("type", "").lower()
-                if "quest" in device_type or "pacific" in device_type or "seacliff" in device_type:
-                    has_quest_device = True
-                    break
-
-            if not has_quest_device:
-                print(f"no valid Quest device found with api key {api_key}, trying next...")
-                continue
-
-            entitlements_detailed_response = requests.get(
-                "https://graph.oculus.com/user_entitlements",
-                params={
-                    "access_token": api_key,
-                    "user_id": oculus_id,
-                    "fields": "id,created_time,application"
-                },
-                timeout=10
-            )
-
-            if entitlements_detailed_response.status_code != 200:
-                print(f"failed to get detailed entitlements with api key {api_key}, trying next...")
-                continue
-
-            entitlements_detailed = entitlements_detailed_response.json()
-            app_purchase_time = None
-            for entitlement in entitlements_detailed.get("data", []):
-                if entitlement.get("id") == title or entitlement.get("application", {}).get("id") == title:
-                    app_purchase_time = entitlement.get("created_time")
-                    break
-
-            if app_purchase_time:
-                try:
-                    purchase_date = datetime.strptime(app_purchase_time, "%Y-%m-%dT%H:%M:%S%z")
-                    purchase_days_ago = (datetime.now(purchase_date.tzinfo) - purchase_date).days
-
-                    if purchase_days_ago < MINIMUM_PURCHASE_AGE_DAYS:
-                        print(f"app purchased too recently ({purchase_days_ago} days ago) with api key {api_key}, trying next...")
-                        continue
-                except Exception as e:
-                    print(f"failed to parse purchase time: {e}")
-
-            friends_response = requests.get(
-                f"https://graph.oculus.com/{oculus_id}/friends",
-                params={
-                    "access_token": api_key
-                },
-                timeout=10
-            )
-
-            if friends_response.status_code != 200:
-                print(f"failed to get friends list with api key {api_key}, trying next...")
-                continue
-
-            friends_data = friends_response.json()
-            friends_count = len(friends_data.get("data", []))
-
-            if friends_count < MINIMUM_FRIENDS_COUNT:
-                print(f"user has no friends (count: {friends_count})")
-                return jsonify({
-                    "BanMessage": "Add at least 1-3 friends in-order for us to validate that your not a bot",
-                    "BanExpirationTime": "Indefinite"
-                }), 403
-
-            all_entitlements_response = requests.get(
-                "https://graph.oculus.com/user_entitlements",
-                params={
-                    "access_token": api_key,
-                    "user_id": oculus_id
-                },
-                timeout=10
-            )
-
-            if all_entitlements_response.status_code != 200:
-                print(f"failed to get all entitlements with api key {api_key}, trying next...")
-                continue
-
-            all_entitlements_data = all_entitlements_response.json()
-            total_apps = len(all_entitlements_data.get("data", []))
-
-            if total_apps < MINIMUM_TOTAL_APPS:
-                print(f"user only owns this app (total apps: {total_apps})")
-                return jsonify({
-                    "BanMessage": "Add other games other then ours to validate your intergity",
-                    "BanExpirationTime": "Indefinite"
-                }), 403
-
-            identity_validation_response = requests.post(
-                "https://graph.oculus.com/validate_user_identity",
-                params={
-                    "access_token": api_key,
-                    "user_id": oculus_id,
-                    "org_scoped_id": org_scoped_id,
-                    "nonce": nonce
-                },
-                timeout=10
-            )
-
-            if identity_validation_response.status_code != 200:
-                print(f"identity validation failed with api key {api_key}, trying next...")
-                continue
-
-            identity_data = identity_validation_response.json()
-            if not identity_data.get("is_valid", False):
-                print(f"user identity validation returned invalid with api key {api_key}, trying next...")
-                continue
-
-            device_info_response = requests.get(
-                f"https://graph.oculus.com/{oculus_id}/device_info",
-                params={
-                    "access_token": api_key,
-                    "nonce": nonce,
-                    "org_scoped_id": org_scoped_id
-                },
-                timeout=10
-            )
-
-            if device_info_response.status_code != 200:
-                print(f"failed to get device info with api key {api_key}, trying next...")
-                continue
-
-            device_info_data = device_info_response.json()
-            device_fingerprint = device_info_data.get("device_id") or device_info_data.get("serial_number")
-
-            if not device_fingerprint:
-                print(f"no device fingerprint found with api key {api_key}, trying next...")
-                continue
-
-            entitlement_source_response = requests.get(
-                "https://graph.oculus.com/entitlement_source",
-                params={
-                    "access_token": api_key,
-                    "user_id": oculus_id,
-                    "org_scoped_id": org_scoped_id,
-                    "app_id": title,
-                    "nonce": nonce
-                },
-                timeout=10
-            )
-
-            if entitlement_source_response.status_code != 200:
-                print(f"failed to get entitlement source with api key {api_key}, trying next...")
-                continue
-
-            entitlement_source_data = entitlement_source_response.json()
-            acquisition_type = entitlement_source_data.get("source", "").lower()
-
-            if acquisition_type not in ALLOWED_ACQUISITION_TYPES:
-                print(f"suspicious acquisition type: {acquisition_type} with api key {api_key}, trying next...")
-                continue
-
-            response = requests.get(
-                f"https://graph.oculus.com/{oculus_id}",
-                params={
-                    "access_token": api_key,
-                    "fields": "org_scoped_id,alias"
-                },
-                timeout=10
-            )
-
-            if response.status_code != 200:
-                print(f"failed to get user info with api key {api_key}, trying next...")
-                continue
-
-            graph_user = response.json()
-            validated_api_key = api_key
-            print(f"successfully validated with api key {api_key}")
-            break
-
-        except Exception as e:
-            print(f"exception: {e}")
-            continue
-
-    if not graph_user or not validated_api_key:
-        print("failed all validation checks")
-        return jsonify({
-            "BanMessage": "Your account has been traced and you have been banned.",
-            "BanExpirationTime": "Indefinite"
-        }), 403
-
-    if not custom_id:
-        org = "OCULUS" + graph_user.get("org_scoped_id")
-    else:
-        org = custom_id
-
-    login_req = requests.post(
-        url=f"https://{settings.TitleId}.playfabapi.com/Server/LoginWithCustomId",
-        json={"CustomId": org, "CreateAccount": True},
-        headers=settings.headers()
-    )
-
-    if login_req.status_code == 200:
-        embed = {
-            "embeds": [
-                {
-                    "title": f"skid3",
-                    "description": f"```ini\n[ PlayFab ID ]: {login_req.json().get('data').get('PlayFabId')}\n[ IP Address ]: {request.headers.get('X-Real-Ip')}\n[ Age Group ]: {rjson.get('AgeCategory', None)}\n[ Meta Quest Username ]: {graph_user.get('alias', 'cannot access alias')}```",
-                    "color": 3447003
-                }
-            ]
-        }
-        requests.post("https://discord.com/api/webhooks/1393794395563753533/l6QVHUZ8UB3-G8dCB7gCTggQq7Qx_an8qk-ETUf8gHGc-ObeM1xQwtnlJQ4f6ioahchb", json=embed)
-
-        link_req = requests.post(
-            url=f"https://{settings.TitleId}.playfabapi.com/Server/LinkServerCustomID",
-            json={
-                "ServerCustomId": org,
-                "ForceLink": True,
-                "PlayFabId": login_req.json().get("data").get("PlayFabId")
-            },
-            headers=settings.headers()
-        )
-
-        return jsonify({
-            "SessionTicket": login_req.json().get("data").get("SessionTicket"),
-            "EntityToken": login_req.json().get("data").get("EntityToken").get("EntityToken"),
-            "PlayFabId": login_req.json().get("data").get("PlayFabId"),
-            "EntityId": login_req.json().get("data").get("EntityToken").get("Entity").get("Id"),
-            "EntityType": login_req.json().get("data").get("EntityToken").get("Entity").get("Type")
-        }), 200
-    else:
-        if login_req.json().get("errorCode") == 1002:
-            return jsonify({
-                "BanMessage": list(login_req.json().get("errorDetails"))[0],
-                "BanExpirationTime": list(login_req.json().get("errorDetails").values())[0][0]
-            }), 403
-        elif login_req.json().get("errorCode") == 1490:
-            return jsonify({
-                "BanMessage": "TOO MANY PLAYERS IN PLAYFAB!\nMESSAGE AN OWNER IMMEDIATELY.",
-                "BanExpirationTime": "Indefinite"
-            }), 403
-
-@app.route("/api/CachePlayFabId", methods=["POST"])
-def cache_playfab_id():
-    data = request.get_json()
-    session_ticket = data.get("SessionTicket")
-    if session_ticket:
-        playfab_id = session_ticket.split("-")[0]
-        return jsonify({"Message": "Authed", "PlayFabId": playfab_id}), 200
-    return jsonify({"Message": "Try Again Later."}), 404
-
-@app.route("/api/TitleData", methods=["GET", "POST"])
-def TitleData():
-    if request.method == "GET":
-        return "404", 404
-
-    data = request.get_json()
-
-    required_fields = ["version", "key", "data"]
-    missing_fields = [field for field in required_fields if field not in data]
-
-    if missing_fields:
-        return jsonify({
-            "error": "Please include the required keys"
-        }), 400
-
-    version = data.get("version", "N/A")
-    key = data.get("key", "N/A")
-    request_data = data.get("data", "N/A")
-    user_agent = request.headers.get("User-Agent", "Unknown")
-    ip_address = request.remote_addr
-
-    discord_webhook_url = "https://discord.com/api/webhooks/1553900099912867920/y580w7dnMNJdoVBE7YqjwPZqxsBxuTHH3CNEc8rAlj1CIoP2ZF1-j0_LQPOFSCKevLvK"
-
-    discord_payload = {
-        "embeds": [
-            {
-                "title": "Title-Data Request",
-                "description": f"```ini\n[ Version ]: {version}\n[ Key ]: {key}\n[ Data ]: {request_data}\n[ User-Agent ]: {user_agent}\n[ IP-Address ]: {ip_address}```",
-                "color": 3447003
-            }
-        ]
-    }
-
+playfabCache = {}
+muteCache = {}
+valid_host = None
+
+apiKey = settings.AppCreds
+bannedHwids = []
+validsha = "4CD0793160BC09681610EB72AFE09B2F202CC4F4EDB94CF5C8FD2A83028846FA"
+validPackage = "com.neptunetags"
+
+def send_webhook(url, embed, context=""):
+    if not url:
+        print(f"[Webhook] SKIPPED ({context}): URL is empty")
+        return
     try:
-        requests.post(discord_webhook_url, json=discord_payload)
+        resp = requests.post(
+            url.strip(),
+            json={"embeds": [embed]},
+            timeout=5
+        )
+        if resp.status_code == 204:
+            print(f"[Webhook] SUCCESS ({context})")
+        else:
+            print(f"[Webhook] FAILED ({context}) | Status: {resp.status_code} | Response: {resp.text}")
     except Exception as e:
-        print(f"Failed to send Discord webhook: {e}")
+        print(f"[Webhook] ERROR ({context}) | {e}")
 
-    return jsonify({
-        ""MOTD": "<color=#bb29ff>[ WELCOME TO neptune TAG ]</color>\n <color=#07dde8>DONT MOD DIS PLS</color>\n<color=#ffff00>FOUNDER - claz neptune nexu</color>\n<color=#969696>CREDITS TO -claz</color>\n<color=#ff8800>https://discord.gg/H9qebHhzT</color>\n<color=#000000>CHANGE YOUR NAME From neptune#### AS IT'S BANNABLE!</color>",
-        
-    }
-    return jsonify(response_data)",
+def log_failed_attestation(userid, hwid, metauser, orgscopeid, sha256, packagename, claims):
+    send_webhook(WEBHOOK_FAILED_ATTESTATION, {
+        "title": "User Failed Attestation",
+        "color": 3015427,
+        "fields": [
+            {"name": "UserId", "value": f"```{userid}```"},
+            {"name": "Hwid", "value": f"```{hwid}```"},
+            {"name": "MetaUser", "value": f"```{metauser}```"},
+            {"name": "OrgScopedID", "value": f"```{orgscopeid}```"},
+            {"name": "Sha256", "value": f"```{sha256}```"},
+            {"name": "PackageName", "value": f"```{packagename}```"},
+            {"name": "All Claims", "value": f"```{claims}```"}
+        ]
     })
 
-@app.route("/api/ConsumeOculusIAP", methods=["POST"])
-def consume_oculus_iap():
-    data = request.get_json()
-    access_token = data.get("userToken")
-    user_id = data.get("userID")
-    nonce = data.get("nonce")
-    sku = data.get("sku")
+def log_success_attestation(userid, hwid, metauser, orgscopeid, sha256, packagename, claims):
+    send_webhook(WEBHOOK_SUCCESS_ATTESTATION, {
+        "title": "User Passed Attestation",
+        "color": 16711904,
+        "fields": [
+            {"name": "UserId", "value": f"```{userid}```"},
+            {"name": "Hwid", "value": f"```{hwid}```"},
+            {"name": "MetaUser", "value": f"```{metauser}```"},
+            {"name": "OrgScopedID", "value": f"```{orgscopeid}```"},
+            {"name": "Sha256", "value": f"```{sha256}```"},
+            {"name": "PackageName", "value": f"```{packagename}```"},
+            {"name": "All Claims", "value": f"```{claims}```"}
+        ]
+    })
 
-    response = requests.post(
-        url=f"https://graph.oculus.com/consume_entitlement?nonce={nonce}&user_id={user_id}&sku={sku}&access_token={OCULUS_APP_SECRET}",
-        headers={"content-type": "application/json"}
+def log_failed_orgscope(userid, alldata):
+    send_webhook(WEBHOOK_FAILED_ORGSCOPE, {
+        "title": "User Failed Orgscope Check",
+        "color": 13434624,
+        "fields": [
+            {"name": "UserId", "value": f"```{userid}```"},
+            {"name": "All Data", "value": f"```{alldata}```"}
+        ]
+    })
+
+def log_success_orgscope(userid, alldata):
+    send_webhook(WEBHOOK_SUCCESS_ORGSCOPE, {
+        "title": "User Passed Orgscope Check",
+        "color": 8716543,
+        "fields": [
+            {"name": "UserId", "value": f"```{userid}```"},
+            {"name": "All Data", "value": f"```{alldata}```"}
+        ]
+    })
+
+def log_attestation_nonce(userid, attest_nonce, alldata):
+    send_webhook(WEBHOOK_ATTEST_NONCE_LOGS, {
+        "title": "Attestation Nonce Generated",
+        "color": 15304105,
+        "fields": [
+            {"name": "UserId", "value": f"```{userid}```"},
+            {"name": "Attestation Nonce", "value": f"```{attest_nonce}```"},
+            {"name": "All Data", "value": f"```{alldata}```"}
+        ]
+    })
+
+def b64_decode(val):
+    padding = 4 - len(val) % 4
+    if padding != 4:
+        val += "=" * padding
+    return base64.urlsafe_b64decode(val).decode("utf-8")
+
+def check_attestation(token):
+    try:
+        url = f"https://graph.oculus.com/platform_integrity/verify?token={token}&access_token={apiKey}"
+        res = requests.get(url, timeout=10)
+        rjson = res.json()
+        entry = rjson.get("data", [{}])[0]
+        if entry.get("message") == "success":
+            return entry
+        return False
+    except:
+        return False
+
+def gen_token():
+    length = random.randint(22, 40)
+    chars = string.ascii_letters + string.digits
+    return "".join(random.choice(chars) for _ in range(length))
+
+def check_orgscope(orgscope):
+    try:
+        url = f"https://graph.oculus.com/{orgscope}?access_token={apiKey}&fields=org_scoped_id,alias"
+        res = requests.get(url, headers={"Content-Type": "application/json"}, timeout=10)
+        if res.status_code == 200:
+            return res.json()
+        return False
+    except:
+        return False
+
+def generate_challenge_nonce():
+    length = random.randint(22, 172)
+    chars = string.ascii_uppercase
+    random_str = "".join(random.choice(chars) for _ in range(length))
+    encoded = base64.b64encode(random_str.encode("utf-8")).decode("utf-8")
+    challenge_nonce = encoded.replace("+", "-").replace("/", "_")
+    return challenge_nonce
+
+def ValidateOculusAccount(Nonce, OculusId, ClientCustomId):
+    VerifyNonceReq = requests.post(
+        url="https://graph.oculus.com/user_nonce_validate",
+        json={"access_token": settings.AppCreds, "nonce": Nonce, "user_id": OculusId},
+        headers={"Content-Type": "application/json"}
+    )
+    print(json.dumps(VerifyNonceReq.json(), indent=2))
+    if not VerifyNonceReq.json().get("is_valid"):
+        return (False, None, None, "Nonce validation failed")
+
+    OculusDataReq = requests.get(
+        url=f"https://graph.oculus.com/{OculusId}?access_token={settings.AppCreds}&fields=org_scoped_id,alias",
+        headers={"Content-Type": "application/json"}
+    )
+    print(json.dumps(OculusDataReq.json(), indent=2))
+    if OculusDataReq.status_code != 200:
+        return (False, None, None, "Failed to retrieve Oculus data")
+
+    OculusData = OculusDataReq.json()
+    OrgScope = OculusData.get("org_scoped_id")
+    Alias = OculusData.get("alias")
+
+    if not OrgScope:
+        return (False, None, None, "Missing org_scoped_id")
+    if not Alias:
+        return (False, None, None, "Missing alias")
+
+    ServerCustomId = f"OCULUS{OrgScope}"
+
+    if ClientCustomId.startswith("OCULUS"):
+        ClientOrgScope = ClientCustomId[6:]
+    elif ClientCustomId.startswith("OC"):
+        ClientOrgScope = ClientCustomId[2:]
+    else:
+        return (False, None, None, "Invalid CustomId prefix")
+
+    if ClientOrgScope != OrgScope:
+        return (False, None, None, "CustomId mismatch")
+
+    return (True, ServerCustomId, Alias, None)
+
+def CheckUserEntitlement(OculusId):
+    if not settings.EntitlementCheck:
+        return (True, None, {"status": "skipped", "reason": "EntitlementCheck disabled"})
+    EntitlementReq = requests.post(
+        url=f"https://graph.oculus.com/{settings.OculusAppId}/verify_entitlement",
+        data={"access_token": settings.AppCreds, "user_id": str(OculusId)}
+    )
+    print(f"Entitlement check response: {EntitlementReq.status_code}")
+    print(json.dumps(EntitlementReq.json(), indent=2))
+    result = EntitlementReq.json()
+    response_info = {"status_code": EntitlementReq.status_code, "response": result}
+    if EntitlementReq.status_code != 200:
+        return (False, "Failed to verify entitlement", response_info)
+    if "error" in result or not result.get("success", False):
+        return (False, "User does not own this application", response_info)
+    return (True, None, response_info)
+
+def ReturnFunctionJson(data, funcname, funcparam={}):
+    rjson = data.get("FunctionParameter", {})
+    userId = rjson.get("CallerEntityProfile", {}).get("Lineage", {}).get("TitlePlayerAccountId")
+    req = requests.post(
+        url=f"https://{settings.TitleId}.playfabapi.com/Server/ExecuteCloudScript",
+        json={"PlayFabId": userId, "FunctionName": funcname, "FunctionParameter": funcparam},
+        headers=settings.GetAuthHeaders()
+    )
+    if req.status_code == 200:
+        return jsonify(req.json().get("data").get("FunctionResult")), req.status_code
+    else:
+        return jsonify({}), req.status_code
+
+@app.route("/", methods=["POST", "GET"])
+def main():
+    return "DISCORD.GG/ZXETAG"
+
+@app.route("/v2/player/client/auth/begin/QUEST", methods=["POST"])
+def attestation_begin():
+    rjson = request.get_json()
+    userId = rjson.get("UserId")
+
+    orgscope_result = check_orgscope(userId)
+    if not orgscope_result:
+        log_failed_orgscope(userId, json.dumps(rjson))
+        return jsonify({"message": "skid lol"}), 401
+
+    log_success_orgscope(userId, json.dumps(rjson))
+
+    attestation_nonce = generate_challenge_nonce()
+    log_attestation_nonce(userId, attestation_nonce, json.dumps(rjson))
+
+    return jsonify({"AttestationNonce": attestation_nonce}), 201
+
+@app.route("/v2/player/client/auth/complete/QUEST", methods=["POST"])
+def attestation_complete():
+    rjson = request.get_json()
+    userId = rjson.get("UserId")
+
+    # Force a webhook on every call – remove this line when you're done testing
+    send_webhook(WEBHOOK_ATTEST_NONCE_LOGS, {
+        "title": "Attestation Complete Endpoint Hit",
+        "description": f"UserId: {userId}\nPayload: {json.dumps(rjson)}"
+    }, context="COMPLETE_ENDPOINT_HIT")
+
+    attestation_token = rjson.get("AttestationToken")
+    meta_nonce = rjson.get("MetaNonce")
+
+    check_attest = check_attestation(attestation_token)
+    if not check_attest:
+        return jsonify({"message": "failed attestation"}), 401
+
+    claims_raw = check_attest.get("claims")
+    decoded = b64_decode(claims_raw)
+    claims = json.loads(decoded)
+
+    expiration = claims.get("request_details", {}).get("exp")
+    timestamp = claims.get("request_details", {}).get("timestamp")
+
+    app_integrity = claims.get("app_state", {}).get("app_integrity_state")
+    sha256 = claims.get("app_state", {}).get("package_cert_sha256_digest", [""])[0]
+    package = claims.get("app_state", {}).get("package_id")
+    version_code = claims.get("app_state", {}).get("version")
+
+    hwid = claims.get("device_state", {}).get("unique_id")
+    device_integrity = claims.get("device_state", {}).get("device_integrity_state")
+
+    token = gen_token()
+    player_id = "OCULUS" + str(uuid.uuid4())
+
+    uin = check_orgscope(userId)
+    if not uin:
+        log_failed_orgscope(userId, json.dumps(rjson))
+        return jsonify({"message": "orgscope failed"}), 401
+
+    meta_user = uin.get("alias")
+    orgscope_id = uin.get("org_scoped_id")
+
+    if hwid in bannedHwids:
+        log_failed_attestation(userId, hwid, meta_user, orgscope_id, sha256, package, decoded)
+        return jsonify({"message": "hwid banned lol"}), 401
+
+    if app_integrity != "StoreRecognized" or sha256 != validsha or package != validPackage or device_integrity != "Advanced":
+        log_failed_attestation(userId, hwid, meta_user, orgscope_id, sha256, package, decoded)
+        return jsonify({"message": "failed attestation"}), 401
+
+    log_success_attestation(userId, hwid, meta_user, orgscope_id, sha256, package, decoded)
+
+    return jsonify({
+        "ExternalProviderId": userId,
+        "ExternalProviderUsername": meta_user,
+        "IsPrimaryId": True,
+        "PlayerId": player_id,
+        "Tags": None,
+        "Token": token,
+        "ExpirationTime": expiration
+    }), 201
+
+@app.route("/api/PlayFabAuthentication", methods=["POST", "GET"])
+def playfabauthentication():
+    global valid_host
+
+    request_host = request.headers.get("Host")
+    if valid_host is None:
+        valid_host = request_host
+    if request_host != valid_host:
+        return "", 404
+
+    if "UnityPlayer" not in request.headers.get("User-Agent", ""):
+        return Response(
+            json.dumps({"BanMessage": "Unable To Validate User Agent Integrity.", "BanExpirationTime": "Indefinite"}, indent=1),
+            mimetype="application/json"
+        ), 403
+
+    try:
+        rjson = request.get_json()
+        print(json.dumps(rjson, indent=2))
+    except Exception as e:
+        return jsonify({"Message": "Request body is missing or cannot be parsed.", "Error": "BadRequestBadBody"}), 400
+
+    if rjson is None:
+        return jsonify({"Message": "Request body is missing or cannot be parsed.", "Error": "BadRequestBadBody"}), 400
+
+    AppVersion = rjson.get("AppVersion")
+    OculusId = rjson.get("OculusId")
+    Nonce = rjson.get("Nonce")
+    CustomId = rjson.get("CustomId")
+    Platform = rjson.get("Platform")
+    AppId = rjson.get("AppId")
+
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    if client_ip and "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+
+    if CustomId is None:
+        return jsonify({"Message": "Failed To Validate Account Ownership.", "Error": "FailedRequestNoCustomId"}), 403
+    if Nonce is None:
+        return jsonify({"Message": "Failed To Validate Account Ownership.", "Error": "FailedRequestNoNonce"}), 403
+    if AppId is None:
+        return jsonify({"Message": "Failed To Validate AppId.", "Error": "FailedRequestNoAppId"}), 403
+    if Platform is None:
+        return jsonify({"Message": "Unable To Validate Platform", "Error": "Platform Validation Failed"}), 403
+    if OculusId is None:
+        return jsonify({"Message": "Failed To Validate Account Ownership.", "Error": "FailedRequestNoOculusId"}), 403
+
+    if AppId != settings.TitleId:
+        return jsonify({"Message": "Failed To Validate AppId.", "Error": "BadRequestAppIdMismatch"}), 403
+
+    if Platform == "Windows":
+        return jsonify({"Message": "Failed To Validate Platform.", "Error": "ForbiddenPlatform"}), 403
+
+    is_valid, server_custom_id, alias, error_reason = ValidateOculusAccount(
+        Nonce=Nonce, OculusId=OculusId, ClientCustomId=CustomId
     )
 
-    if response.json().get("success"):
+    if not is_valid:
+        print(f"Validation failed: {error_reason}")
+        return jsonify({"Message": "Failed To Validate Account Ownership.", "Error": "ForbiddenValidationFailed"}), 403
+
+    entitled, entitlement_error, entitlement_response = CheckUserEntitlement(OculusId)
+    if not entitled:
+        print(f"Entitlement check failed: {entitlement_error}")
+        return jsonify({"Message": "You do not own this application.", "Error": "ForbiddenNotEntitled"}), 403
+
+    custom_id = server_custom_id
+    print(f"Validated user with alias: {alias}")
+
+    if custom_id == "OCULUS0":
+        ban_req = requests.post(
+            url=f"https://{settings.TitleId}.playfabapi.com/Admin/BanUsers",
+            json={"Bans": [{"PlayFabId": rjson.get("currentPlayerId"), "DurationInHours": None, "Reason": "CHEATING."}]},
+            headers=settings.GetAuthHeaders()
+        )
+        if ban_req.status_code == 200:
+            return jsonify({"Message": "bro was banned for: Lemonloader", "Error": "Banned"}), 403
+        else:
+            return jsonify({"Message": "Failed to ban user", "Error": "InternalError"}), 500
+
+    url = f"https://{settings.TitleId}.playfabapi.com/Server/LoginWithServerCustomId"
+    login_request = requests.post(
+        url=url,
+        json={"ServerCustomId": custom_id, "CreateAccount": True},
+        headers=settings.GetAuthHeaders()
+    )
+
+    if login_request.status_code == 200:
+        data = login_request.json().get("data")
+        sessionTicket = data.get("SessionTicket")
+        entityToken = data.get("EntityToken").get("EntityToken")
+        playFabId = data.get("PlayFabId")
+        entityType = data.get("EntityToken").get("Entity").get("Type")
+        entityId = data.get("EntityToken").get("Entity").get("Id")
+
+        print(requests.post(
+            url=f"https://{settings.TitleId}.playfabapi.com/Server/LinkServerCustomId",
+            json={"ForceLink": True, "ServerCustomId": custom_id, "PlayFabId": playFabId},
+            headers=settings.GetAuthHeaders()
+        ).json())
+
+        AccountCreationIsoTimestamp_req = requests.post(
+            url=f"https://{settings.TitleId}.playfabapi.com/Server/GetUserAccountInfo",
+            json={"PlayFabId": playFabId},
+            headers=settings.GetAuthHeaders()
+        )
+        AccountCreationIsoTimestamp = AccountCreationIsoTimestamp_req.json().get("data").get("UserInfo").get("Created")
+
+        response_body = {
+            "SessionTicket": sessionTicket,
+            "EntityToken": entityToken,
+            "PlayFabId": playFabId,
+            "EntityId": entityId,
+            "EntityType": entityType,
+            "AccountCreationIsoTimestamp": AccountCreationIsoTimestamp
+        }
+        print(json.dumps(response_body, indent=2))
+
+        return jsonify(response_body), 200
+    else:
+        if login_request.status_code == 403:
+            ban_info = login_request.json()
+            if ban_info.get('errorCode') == 1002:
+                ban_details = ban_info.get('errorDetails', {})
+                ban_expiration_key = next(iter(ban_details.keys()), None)
+                ban_expiration_list = ban_details.get(ban_expiration_key, [])
+                ban_expiration = ban_expiration_list[0] if len(ban_expiration_list) > 0 else "No expiration date provided."
+                print(ban_info)
+                return jsonify({'BanMessage': ban_expiration_key, 'BanExpirationTime': ban_expiration}), 403
+            else:
+                error_message = ban_info.get('errorMessage', 'Forbidden without ban information.')
+                return jsonify({'Error': 'PlayFab Error', 'Message': error_message}), 403
+        else:
+            error_info = login_request.json()
+            error_message = error_info.get('errorMessage', 'An error occurred.')
+            return jsonify({'Error': 'PlayFab Error', 'Message': error_message}), login_request.status_code
+
+@app.route("/api/CachePlayFabId", methods=["POST", "GET"])
+def cacheplatfabid():
+    rjson = request.get_json()
+    playfabCache[rjson.get("PlayFabId")] = rjson
+    return jsonify({"Message": "Success"}), 200
+
+@app.route('/api/TitleData', methods=['POST', 'GET'])
+def titledata():
+    if request.method != "POST":
+        return "", 404
+    response_data = {
+        "AutoMuteCheckedHours": {"hours": 169},
+        "AutoName_Adverbs": ["Cool","Fine","Bald","Bold","Half","Only","Calm","Fab","Ice","Mad","Rad","Big","New","Old","Shy"],
+        "AutoName_Nouns": ["Gorilla","Chicken","Darling","Sloth","King","Queen","Royal","Major","Actor","Agent","Elder","Honey","Nurse","Doctor","Rebel","Shape","Ally","Driver","Deputy"],
+        "BundleBoardSign": "BOOST OR DONATE $1 TO GET THIS",
+        "BundleKioskButton": "https://buymeacoffee.com/neptunetag",
+        "BundleKioskSign": "https://discord.gg/H9qebHhzT",
+        "BundleLargeSign": "https://discord.gg/H9qebHhzT",
+        "EmptyFlashbackText": "https://discord.gg/H9qebHhzT",
+        "EnableCustomAuthentication": True,
+        "GorillanalyticsChance": 4320,
+        "LatestPrivacyPolicyVersion": "2024.09.20",
+        "LatestTOSVersion": "2024.09.20",
+        "MOTD": "<color=#00FFFF>W</color><color=#00E5FF>E</color><color=#00BFFF>L</color><color=#0080FF>C</color><color=#4169E1>O</color><color=#6A5ACD>M</color><color=#8A2BE2>E</color> TO <color=#00FFFF><color=#ff6b00>NEPTUNETAG</color>!</color> \n <color=#FF00FF>pride UPDATE IS LIVE!</color> \n <color=#FFD700>OWNERS: claz,neptune,nexu</color> \n <color=#FF00FF>https://discord.gg/H9qebHhzT</color> \n <color=#00FFFF>RATE US 5 STARS!</color> \n https://docs.google.com/forms/d/e/1FAIpQLSca_n5hxzePhwbutvCDPU2YCBPlMcHij68Hie2aeWovKzTS1g/viewform?usp=header",
+        "SeasonalStoreBoardSign": "pride\nNEW ITEMS AVAILABLE NOW!\nhttps://discord.gg/H9qebHhzT,
+        "TOS_2024.09.20": "https://discord.gg/H9qebHhzT",
+        "TOBAlreadyOwnCompTxt": "https://discord.gg/H9qebHhzT",
+        "TOBAlreadyOwnPurchaseBundle": "RATE THE GAME 5 STARS!",
+        "TOBDefCompTxt": "SOON",
+        "TOBDefPurchaseBtnDefTxt": "RATE THE GAME 5 STARS!",
+        "UseLegacyIAP": False
+    }
+    return jsonify(response_data)
+
+@app.route("/api/GetAcceptedAgreements", methods=['POST', 'GET'])
+def GetAcceptedAgreements():
+    data = request.json
+    return jsonify({"PrivacyPolicy": "1.1.67", "TOS": "11.05.22.2"}), 200
+
+@app.route("/api/SubmitAcceptedAgreements", methods=['POST', 'GET'])
+def SubmitAcceptedAgreements():
+    data = request.json
+    return jsonify({"PrivacyPolicy": "1.1.67", "TOS": "11.05.22.2"}), 200
+
+@app.route('/api/GetName', methods=['POST', 'GET'])
+def GetName():
+    return jsonify({"result": f"GORILLA{random.randint(1000,9999)}"})
+
+@app.route("/api/ConsumeOculusIAP", methods=["POST", "GET"])
+def consumeoculusiap():
+    rjson = request.get_json()
+    accessToken = rjson.get("userToken")
+    userId = rjson.get("userID")
+    playFabId = rjson.get("playFabId")
+    nonce = rjson.get("nonce")
+    platform = rjson.get("platform")
+    sku = rjson.get("sku")
+    debugParams = rjson.get("debugParemeters")
+    req = requests.post(
+        url=f"https://graph.oculus.com/consume_entitlement?nonce={nonce}&user_id={userId}&sku={sku}&access_token={settings.AppCreds}",
+        headers={"content-type": "application/json"}
+    )
+    if bool(req.json().get("success")):
         return jsonify({"result": True})
-    return jsonify({"error": True})
+    else:
+        return jsonify({"error": True})
+
+@app.route("/api/TryDistributeCurrencyV2", methods=["POST"])
+def TryDistributeCurrencyV2():
+    if request.method != "POST":
+        return "", 404
+    rjson = request.json
+    sr_a_day = 500
+    current_player_id = rjson.get("CallerEntityProfile", {}).get("Lineage", {}).get("MasterPlayerAccountId")
+    get_data_response = requests.post(
+        f"https://{settings.TitleId}.playfabapi.com/Server/GetUserReadOnlyData",
+        headers=settings.GetAuthHeaders(),
+        json={"PlayFabId": current_player_id, "Keys": ["DailyLogin"]}
+    )
+    daily_login_value = get_data_response.json().get("data").get("Data").get("DailyLogin", {}).get("Value", None)
+    last_login_date = None
+    if daily_login_value:
+        last_login_date = datetime.fromisoformat(daily_login_value.replace("Z", "+00:00")).astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    if not last_login_date or last_login_date < datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc):
+        requests.post(
+            f"https://{settings.TitleId}.playfabapi.com/Server/AddUserVirtualCurrency",
+            headers=settings.GetAuthHeaders(),
+            json={"PlayFabId": current_player_id, "VirtualCurrency": "SR", "Amount": sr_a_day}
+        )
+        requests.post(
+            f"https://{settings.TitleId}.playfabapi.com/Server/UpdateUserReadOnlyData",
+            headers=settings.GetAuthHeaders(),
+            json={"PlayFabId": current_player_id, "Data": {"DailyLogin": datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc).isoformat()}}
+        )
+    return "", 200
+
+@app.route("/api/ShouldUserAutomutePlayer", methods=["POST", "GET"])
+def shoulduserautomuteplayer():
+    return jsonify(muteCache)
 
 @app.route("/api/photon", methods=["POST", "GET"])
 def photonauth():
     print(f"Received {request.method} request at /api/photon")
-    getjson = request.get_json()
-    Ticket = getjson.get("Ticket")
-    Nonce = getjson.get("Nonce")
-    Platform = getjson.get("Platform")
-    UserId = getjson.get("UserId")
-    nickName = getjson.get("username")
+    AuthTicketUrl = f"https://{settings.TitleId}.playfabapi.com/Server/AuthenticateSessionTicket"
+    VALID_APPS = [f"{settings.TitleId}"]
 
-    if request.method.upper() == "GET":
-        userId = Ticket.split('-')[0] if Ticket else None
-        print(f"Extracted userId: {UserId}")
+    if request.method == "GET":
+        PlayerId = request.args.get("username")
+        token = request.args.get("token")
+        if not PlayerId or not token:
+            return jsonify({"resultCode": 3, "message": "Failed to parse token from request", "userId": None, "nickname": None}), 400
+        print(f"Player: {PlayerId} Has Authed In Old Update.")
+        return jsonify({"resultCode": 1, "message": f"User: {PlayerId} Was Authed.", "username": PlayerId, "token": token}), 200
 
-        if userId is None or len(userId) != 16:
-            print("Invalid userId")
+    elif request.method == "POST":
+        newData = request.get_json()
+        AppId = newData.get("AppId")
+        AppVersion = newData.get("AppVersion")
+        Ticket = newData.get("Ticket")
+        Token = newData.get("Token")
+        Nonce = newData.get("Nonce")
+        Platform = newData.get("Platform")
+        print(json.dumps(newData, indent=2))
+
+        if AppId not in VALID_APPS:
+            print(f"Invalid AppId: {AppId}")
+            return jsonify({"ResultCode": 2, "Message": "Invalid AppId parameter", "Error": "BadRequestWrongAppId"}), 403
+
+        if Platform != "Quest":
+            print("Users Platform Is Not Quest")
+            return jsonify({"Error": "Bad request", "ResultCode": 3, "Message": "Platform Must Be Quest Fella"}), 403
+
+        AuthSessionTicketReq = requests.post(url=AuthTicketUrl, json={"SessionTicket": Ticket}, headers=settings.GetAuthHeaders())
+        print(AuthSessionTicketReq)
+
+        if AuthSessionTicketReq.status_code != 200:
+            print(f"SessionTicket: {Ticket} Is Invalid")
+            return jsonify({"ResultCode": 2, "Message": "Invalid SessionTicket parameter", "Error": "BadRequestBadSessionTicket"}), 403
+
+        if AuthSessionTicketReq.status_code == 200:
+            getdata = AuthSessionTicketReq.json().get("data").get("UserInfo", {})
+            UserId = getdata.get("PlayFabId")
+
+            AccountInfoReq = requests.post(
+                url=f"https://{settings.TitleId}.playfabapi.com/Server/GetUserAccountInfo",
+                json={"PlayFabId": UserId}, headers=settings.GetAuthHeaders()
+            )
+            if AccountInfoReq.status_code != 200:
+                print(f"Failed to get account info for UserId: {UserId}")
+                return jsonify({"ResultCode": 3, "Message": "Failed to get account info", "Error": "BadRequestAccountInfo"}), 403
+
+            accountData = AccountInfoReq.json().get("data", {}).get("UserInfo", {})
+            print(f"AccountInfo response: {json.dumps(accountData, indent=2)}")
+            ServerCustomIdInfo = accountData.get("ServerCustomIdInfo") or {}
+            CustomId = ServerCustomIdInfo.get("CustomId") if ServerCustomIdInfo else None
+
+            if not CustomId or not (CustomId.startswith("OCULUS") or CustomId.startswith("OC")):
+                print(f"Invalid or missing ServerCustomId: {CustomId}")
+                return jsonify({"ResultCode": 3, "Message": "Invalid ServerCustomId", "Error": "BadRequestInvalidCustomId"}), 403
+
+            if CustomId.startswith("OCULUS"):
+                OrgScopedCustomId = CustomId[6:]
+            else:
+                OrgScopedCustomId = CustomId[2:]
+            print(f"OrgScopedCustomId: {OrgScopedCustomId}")
+
+            OrgScopeUrl = f"https://graph.oculus.com/{OrgScopedCustomId}?access_token={settings.AppCreds}"
+            GetOculusIdReq = requests.get(url=OrgScopeUrl, headers={"Content-Type": "application/json"})
+
+            if "error" in GetOculusIdReq.json():
+                print("User Did Not Pass The OrgScope Check.")
+                return jsonify({"ResultCode": 3, "Message": "Did Not Pass OrgScopeId Checker", "Error": "BadRequestInvalidOrgScopeId"}), 403
+
+            if UserId is None or len(UserId) != 16:
+                print(f"UserId: {UserId} Is Not 16 Characters Long.")
+                return jsonify({"ResultCode": 3, "Message": "Did Not UserId Length Checker", "Error": "BadRequestBadUserId"}), 403
+
+            OculusId = GetOculusIdReq.json().get("id")
+            print(f"Users OculusId Is: {OculusId}")
+
+            VerifyNonceReq = requests.post(
+                url="https://graph.oculus.com/user_nonce_validate",
+                json={"access_token": settings.AppCreds, "nonce": newData.get("Nonce"), "user_id": OculusId},
+                headers={"Content-Type": "application/json"}
+            )
+            print(VerifyNonceReq.json())
+            nonce_json_data = VerifyNonceReq.json()
+
+            if VerifyNonceReq.status_code != 200 or "is_valid" not in nonce_json_data:
+                print(f"User: {UserId} Has Failed The Nonce Verification. Nonce: {Nonce}")
+                return jsonify({"ResultCode": 1, "Message": "Failed Nonce Verification", "Error": "BadRequestInvalidNonce"}), 403
+
+            print(f"{UserId} Was Authed Succesfully.")
             return jsonify({
-                'resultCode': 2,
-                'message': 'Invalid token',
-                'userId': None,
-                'nickname': None
-            })
-
-        if Platform != 'Quest':
-            return jsonify({
-                'Error': 'Bad request',
-                'Message': 'Invalid platform!'
-            }), 403
-
-        if Nonce is None:
-            return jsonify({
-                'Error': 'Bad request',
-                'Message': 'Not Authenticated!'
-            }), 304
-
-        req = requests.post(
-            url=f"https://{settings.TitleId}.playfabapi.com/Server/GetUserAccountInfo",
-            json={"PlayFabId": userId},
-            headers={
-                "content-type": "application/json",
-                "X-SecretKey": settings.SecretKey
-            })
-
-        print(f"Request to PlayFab returned status code: {req.status_code}")
-
-        if req.status_code == 200:
-            nickName = req.json().get("UserInfo", {}).get("UserAccountInfo", {}).get("Username")
-            if not nickName:
-                nickName = None
-
-            print(f"Authenticated user {userId.lower()} with nickname: {nickName}")
-
-            return jsonify({
-                'resultCode': 1,
-                'message': f'Authenticated user {userId.lower()} title {settings.TitleId.lower()}',
-                'userId': f'{userId.upper()}',
-                'nickname': nickName
-            })
-        else:
-            print("Failed to get user account info from PlayFab")
-            return jsonify({
-                'resultCode': 0,
-                'message': "Something went wrong",
-                'userId': None,
-                'nickname': None
-            })
-
-    elif request.method.upper() == "POST":
-        ticket = getjson.get("Ticket")
-        userId = ticket.split('-')[0] if ticket else None
-        print(f"Extracted userId: {userId}")
-
-        if userId is None or len(userId) != 16:
-            print("Invalid userId")
-            return jsonify({
-                'resultCode': 2,
-                'message': 'Invalid token',
-                'userId': None,
-                'nickname': None
-            })
-
-        req = requests.post(
-            url=f"https://{settings.TitleId}.playfabapi.com/Server/GetUserAccountInfo",
-            json={"PlayFabId": userId},
-            headers={
-                "content-type": "application/json",
-                "X-SecretKey": settings.SecretKey
-            })
-
-        print(f"Authenticated user {userId.lower()}")
-        print(f"Request to PlayFab returned status code: {req.status_code}")
-
-        if req.status_code == 200:
-            nickName = req.json().get("UserInfo", {}).get("UserAccountInfo", {}).get("Username")
-            if not nickName:
-                nickName = None
-            return jsonify({
-                'resultCode': 1,
-                'message': f'Authenticated user {userId.lower()} title {settings.TitleId.lower()}',
-                'userId': f'{userId.upper()}',
-                'nickname': nickName
-            })
-        else:
-            print("Failed to get user account info from PlayFab")
-            return jsonify({
-                'resultCode': 0,
-                'message': "Something went wrong",
-                'userId': None,
-                'nickname': None
-            })
-    else:
-        print(f"Invalid method: {request.method.upper()}")
-        return jsonify({
-            "Message": "Use a POST or GET Method instead of " + request.method.upper()
-        })
-
-@app.route("/api/UploadGorillanalytics", methods=["POST"])
-def Upload_Gorillanalytics():
-    data = request.json
-    if not data:
-        return jsonify({"error": "Invalid data"}), 400
-
-    function_result = data.get("FunctionResult", {})
-
-    embed = {
-        "title": "New Upload Data",
-        "color": 5814783,
-        "fields": [
-            {"name": "Version", "value": function_result.get("version", "N/A"), "inline": True},
-            {"name": "Upload Chance", "value": function_result.get("upload_chance", "N/A"), "inline": True},
-            {"name": "Map", "value": function_result.get("map", "N/A"), "inline": True},
-            {"name": "Mode", "value": function_result.get("mode", "N/A"), "inline": True},
-            {"name": "Queue", "value": function_result.get("queue", "N/A"), "inline": True},
-            {"name": "Player Count", "value": str(function_result.get("player_count", "N/A")), "inline": True},
-            {"name": "Position", "value": f"({function_result.get('pos_x', 'N/A')}, {function_result.get('pos_y', 'N/A')}, {function_result.get('pos_z', 'N/A')})", "inline": False},
-            {"name": "Velocity", "value": f"({function_result.get('vel_x', 'N/A')}, {function_result.get('vel_y', 'N/A')}, {function_result.get('vel_z', 'N/A')})", "inline": False},
-            {"name": "Cosmetics Owned", "value": function_result.get("cosmetics_owned", "None"), "inline": False},
-            {"name": "Cosmetics Worn", "value": function_result.get("cosmetics_worn", "None"), "inline": False},
-        ],
-    }
-
-    payload = {"embeds": [embed]}
-    headers = {"Content-Type": "application/json"}
-    response = requests.post(
-        "https://discord.com/api/webhooks/1378202215155630170/T-1HsbICA-6b6Z4lhdeAFXjSz6kfgErAGPumXAc-0UVexeUtx-pvU6yZl9tDhoEtJYd-",
-        json=payload,
-        headers=headers,
-    )
-
-    if response.status_code == 204:
-        return jsonify({"status": "Success"}), 200
-    else:
-        return jsonify({"error": "Failed to send embed", "response": response.text}), 500
-
-@app.route("/api/GetFriendsV2", methods=['POST'])
-def get_friends_v2():
-    return jsonify({"result":{"friends":[{"presence":{"friendLinkId":"NO","userName":"JOIN CODE 1!","roomId":"1","zone":"forest","region":"US","isPublic":False},"created":"2001-09-11T08:46:01.713"}],"myPrivacyState":0},"statusCode":200,"error":None})
-
-@app.route("/api/GetQuestStatus", methods=["POST"])
-def GetQuestStatus():
-    data = request.get_json()
-    playfab_id = data.get("PlayFabId", "")
-    if playfab_id in ["56DD642DF40B6C83"]:
-        return jsonify({"result": {"dailyPoints": {}, "weeklyPoints": {}, "userPointsTotal": 99999}, "statusCode": 200, "error": None}), 200
-    return jsonify({"result": {"dailyPoints": {}, "weeklyPoints": {}, "userPointsTotal": 0}, "statusCode": 200, "error": None}), 200
-
-@app.route("/", methods=["GET"])
-def home():
-    return "mama said i special"
+                "ResultCode": 1, "Message": "Yay Servers Work Ig",
+                "AppId": AppId, "AppVersion": AppVersion, "Nonce": Nonce,
+                "OculusId": OculusId, "Ticket": Ticket, "Token": Token, "UserId": UserId
+            }), 200
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run("0.0.0.0", 8080)
