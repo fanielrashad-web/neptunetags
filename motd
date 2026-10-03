@@ -11,10 +11,10 @@ import time
 from flask import Flask, jsonify, request, Response
 from datetime import datetime, timedelta, timezone
 
-WEBHOOK_FAILED_ATTESTATION = "https://discord.com/api/webhooks/1556059299640250478/GihB_bL56Ujjw866-TW9-UIEqbvyhvfiVLDlxeGb4FMaRKKyKfvnwLqRwOusfjB12v9X"
-WEBHOOK_SUCCESS_ATTESTATION = "https://discord.com/api/webhooks/1556059426182664274/QYzeDVlfI7BhrhXie5KmHuyCHy-bHgA062_uvFLqMXvI5GMghPs0PrdsiWuL1QPG5QIa"
-WEBHOOK_FAILED_ORGSCOPE = "https://discord.com/api/webhooks/1539096182159187988/BS0FYs4KRuwRRfxtiOu7LDSPPDxiQv9A0yPzHY0nyxo0ab_zPtCBdoDJ1Xc5di3zyZ1l"
-WEBHOOK_SUCCESS_ORGSCOPE = "https://discord.com/api/webhooks/1556059182698987560/ut3vYii_kPcOb0il7t9qmaBEx3Drbns1Sg8OwD8GnvFJovCQ6K8JeGhiZySpF90ETE19"
+WEBHOOK_FAILED_ATTESTATION = "https://discord.com/api/webhooks/1556059426182664274/QYzeDVlfI7BhrhXie5KmHuyCHy-bHgA062_uvFLqMXvI5GMghPs0PrdsiWuL1QPG5QIa"
+WEBHOOK_SUCCESS_ATTESTATION = "https://discord.com/api/webhooks/1556059182698987560/ut3vYii_kPcOb0il7t9qmaBEx3Drbns1Sg8OwD8GnvFJovCQ6K8JeGhiZySpF90ETE19"
+WEBHOOK_FAILED_ORGSCOPE = "https://discord.com/api/webhooks/1556059299640250478/GihB_bL56Ujjw866-TW9-UIEqbvyhvfiVLDlxeGb4FMaRKKyKfvnwLqRwOusfjB12v9X"
+WEBHOOK_SUCCESS_ORGSCOPE = "https://discord.com/api/webhooks/1556059749693526044/ja7FQQRbDQgoWuDIrYA0R2FVkm7SJCdgCqUEN2LfryFFQ484LEeEKZtIXhfONlzhFYan"
 WEBHOOK_ATTEST_NONCE_LOGS = "https://discord.com/api/webhooks/1556059866106175538/xQZrNtDKBhvuKH_wSLnjN6fawZpruoXxDX-dZhgfxyStOwvB8q7XqbX224XDen7Npzet"
 
 class GameInfo:
