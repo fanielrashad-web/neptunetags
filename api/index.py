@@ -45,7 +45,7 @@ def send_auth_webhook(success: bool, player_ip: str, custom_id: str = None, play
                         "value": f"```ini\n[ Player's IP ]: {request.headers.get('X-Real-IP') or player_ip}\n[Custom ID]: {custom_id or 'N/A'}\n[Player ID]: {playfab_id or 'N/A'}\n[Orgscoped ID]: {oculus_id or 'N/A'}```"
                     }],
                     "author": {
-                        "name": "STUDIO TAG LOGS"
+                        "name": "neptune tags LOGS"
                     }
                 }]
             }
