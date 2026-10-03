@@ -7,8 +7,8 @@ import hashlib
 from flask import Flask, jsonify, request, Response
 from datetime import datetime, timedelta
 
-OCULUS_APP_ID = ""
-OCULUS_APP_SECRET = ""
+OCULUS_APP_ID = "1368878832972597"
+OCULUS_APP_SECRET = "d671be382b99a69777de71c1480a4c39"
 MINIMUM_ACCOUNT_AGE_DAYS = 7
 MINIMUM_PURCHASE_AGE_DAYS = 1
 MINIMUM_FRIENDS_COUNT = 1
@@ -17,7 +17,7 @@ ALLOWED_ACQUISITION_TYPES = ["store_purchase", "store", "purchase"]
 UNITY_USER_AGENT = "UnityPlayer/2022.3.2f1 (UnityWebRequest/1.0, libcurl/7.84.0-DEV)"
 UNITY_VERSION = "2022.3.2f1"
 REQUIRED_PLATFORM = "Quest"
-REQUIRED_APP_VERSION = ""
+REQUIRED_APP_VERSION = "5223"
 
 class GameInfo:
     def __init__(self):
