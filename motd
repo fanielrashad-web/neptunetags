@@ -8,7 +8,7 @@ import base64
 class GameInfo:
     def __init__(self):
         self.TitleId: str = "87F0E"
-        self.SecretKey: str = "I43389NRMNNTXKY5QGGUYRSEXO4E8ZT86OE381O9CH431PCP3S"
+        self.SecretKey: str = "EWNGKJCPPWDUFG11KEOYITY5WEM6HMOPXE4G15WDC8CAG1RPEG"
         self.ApiKey: str = "d671be382b99a69777de71c1480a4c39"
         self.DiscordWebhookUrl: str = "webhook"
 
