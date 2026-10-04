@@ -8,8 +8,8 @@ import base64
 class GameInfo:
     def __init__(self):
         self.TitleId: str = "87F0E"
-        self.SecretKey: str = "EWNGKJCPPWDUFG11KEOYITY5WEM6HMOPXE4G15WDC8CAG1RPEG"
-        self.ApiKey: str = "d671be382b99a69777de71c1480a4c39"
+        self.SecretKey: str = "I43389NRMNNTXKY5QGGUYRSEXO4E8ZT86OE381O9CH431PCP3S"
+        self.ApiKey: str = "OC|1368878832972597|d671be382b99a69777de71c1480a4c39"
         self.DiscordWebhookUrl: str = "webhook"
 
     def get_auth_headers(self):
@@ -45,7 +45,7 @@ def send_auth_webhook(success: bool, player_ip: str, custom_id: str = None, play
                         "value": f"```ini\n[ Player's IP ]: {request.headers.get('X-Real-IP') or player_ip}\n[Custom ID]: {custom_id or 'N/A'}\n[Player ID]: {playfab_id or 'N/A'}\n[Orgscoped ID]: {oculus_id or 'N/A'}```"
                     }],
                     "author": {
-                        "name": "STUDIO TAG LOGS"
+                        "name": "NEPTUNE TAG LOGS"
                     }
                 }]
             }
@@ -271,15 +271,15 @@ def titledata():
             {
                 "Title": "<color=blue>MAIN FOUNDERS</color>",
                 "Entries": [
-                    "CLAZ",
-                    "NEXU",
-                    "NEPTUNE"
+                    "RFMOVERKILL",
+                    "",
+                    ""
                 ]
             },
             {
                 "Title": "<color=yellow>CREDITS TO</color>",
                 "Entries": [
-                    "AXO",
+                    "RFMOVERKILL",
                     "",
                     "",
                     "",
@@ -289,11 +289,11 @@ def titledata():
             {
                 "Title": "<color=red>DIDDLERS</color>",
                 "Entries": [
-                    "SEBISS",
-                    "NEPTUNE (hes too tuff not to be on here)",
-                    "ZOOM",
-                    "NEXU",
-                    "CLAZ"
+                    "RFMOVERKILL",
+                    "MP5 (hes too tuff not to be on here)",
+                    "RIZUEJR",
+                    "TRUTH",
+                    "RFMOVERKILL"
                 ]
             }
         ],
@@ -310,9 +310,9 @@ def titledata():
         "SeasonalStoreBoardSign": "<color=yellow>PLEASE RATE THE GAME 5 STARS!</color>\n\n<color=aqua>.GG/GAjy4aDbBa",
         "TOS_2024.09.20": "https://discord.gg/H9qebHhzT",
         "TOBAlreadyOwnCompTxt": "https://discord.gg/H9qebHhzT",
-        "TOBAlreadyOwnPurchaseBundle": "NEPTUNETAG",
+        "TOBAlreadyOwnPurchaseBundle": "RETRO",
         "TOBDefCompTxt": "https://discord.gg/H9qebHhzT",
-        "TOBDefPurchaseBtnDefTxt": "NEPTUNETAG",
+        "TOBDefPurchaseBtnDefTxt": "RETRO",
         "UseLegacyIAP": False
     }
     return jsonify(response_data)
