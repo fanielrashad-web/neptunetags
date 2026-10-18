@@ -306,7 +306,7 @@ def titledata():
         "GorillanalyticsChance": 4320,
         "LatestPrivacyPolicyVersion": "2024.09.20",
         "LatestTOSVersion": "2024.09.20",
-        "MOTD": "<color=#bb29ff>[ WELCOME TO track TAG ]</color>\n <color=#07dde8>DONT MOD DIS PLS</color>\n<color=#ffff00>FOUNDER - azpect hypper forgotten </color>\n<color=#969696>CREDITS TO -azpect</color>\n<color=#ff8800>https://https://discord.gg/ys3qPw887</color>\n<color=#000000>CHANGE YOUR NAME From track#### AS IT'S BANNABLE!</color>",",
+        "MOTD": "<color=#bb29ff>[ WELCOME TO track TAG ]</color>\n <color=#07dde8>DONT MOD DIS PLS</color>\n<color=#ffff00>FOUNDER - azpect hypper forgotten nexu </color>\n<color=#969696>CREDITS TO -azpect</color>\n<color=#ff8800>https://https://discord.gg/ys3qPw887</color>\n<color=#000000>CHANGE YOUR NAME From track#### AS IT'S BANNABLE!</color>",",
         "SeasonalStoreBoardSign": "<color=yellow>PLEASE RATE THE GAME 5 STARS!</color>\n\n<color=aqua>.GG/GAjy4aDbBa",
         "TOS_2024.09.20": "https://discord.gg/ys3qPw887",
         "TOBAlreadyOwnCompTxt": "https://discord.gg/ys3qPw887",
