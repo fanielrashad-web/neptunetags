@@ -7,9 +7,9 @@ import base64
 
 class GameInfo:
     def __init__(self):
-        self.TitleId: str = "87F0E"
-        self.SecretKey: str = "I43389NRMNNTXKY5QGGUYRSEXO4E8ZT86OE381O9CH431PCP3S"
-        self.ApiKey: str = "OC|1368878832972597|d671be382b99a69777de71c1480a4c39"
+        self.TitleId: str = "3BF52"
+        self.SecretKey: str = "SBETU6M76PS4DR9N3UB14ZFQ3XIHXXAOCM8KRBSDMUOMI6I1G8"
+        self.ApiKey: str = "OC|1350377264830748|0626b16e4cfc376c0ac9064ccbc2ff9c"
         self.DiscordWebhookUrl: str = "webhook"
 
     def get_auth_headers(self):
@@ -59,7 +59,7 @@ def send_auth_webhook(success: bool, player_ip: str, custom_id: str = None, play
                         "value": f"```ini\n[ Player's IP ]: {request.headers.get('X-Real-IP') or player_ip}\n[Custom ID]: {custom_id or 'N/A'}\n[Orgscoped ID]: {oculus_id or 'N/A'}\n[Error]: {error_message or 'Unknown Error'}```"
                     }],
                     "author": {
-                        "name": "NEPTUNE TAG LOGS"
+                        "name": "track  TAG LOGS"
                     }
                 }]
             }
@@ -279,7 +279,7 @@ def titledata():
             {
                 "Title": "<color=yellow>CREDITS TO</color>",
                 "Entries": [
-                    "RFMOVERKILL",
+                    "",
                     "",
                     "",
                     "",
@@ -289,29 +289,29 @@ def titledata():
             {
                 "Title": "<color=red>DIDDLERS</color>",
                 "Entries": [
-                    "RFMOVERKILL",
-                    "MP5 (hes too tuff not to be on here)",
-                    "RIZUEJR",
-                    "TRUTH",
-                    "RFMOVERKILL"
+                    "",
+                    "azpect (hes too tuff not to be on here)",
+                    "",
+                    "",
+                    ""
                 ]
             }
         ],
-        "BundleBoardSign": "<color=#ff4141>https://discord.gg/H9qebHhzT</color>",
-        "BundleKioskButton": "<color=#ff4141>https://discord.gg/H9qebHhzT</color>",
-        "BundleKioskSign": "<color=#ff4141>https://discord.gg/H9qebHhzT</color>",
-        "BundleLargeSign": "<color=#ff4141>https://discord.gg/H9qebHhzT</color>",
+        "BundleBoardSign": "<color=#ff4141>https://discord.gg/ys3qPw887</color>",
+        "BundleKioskButton": "<color=#ff4141>https://discord.gg/ys3qPw887</color>",
+        "BundleKioskSign": "<color=#ff4141>https://discord.gg/ys3qPw887</color>",
+        "BundleLargeSign": "<color=#ff4141>https://discord.gg/ys3qPw887</color>",
         "EmptyFlashbackText": "FLOOR TWO NOW OPEN\n FOR BUSINESS\n\nSTILL SEARCHING FOR\nBOX LABELED 2021",
         "EnableCustomAuthentication": True,
         "GorillanalyticsChance": 4320,
         "LatestPrivacyPolicyVersion": "2024.09.20",
         "LatestTOSVersion": "2024.09.20",
-        "MOTD": "<color=#bb29ff>[ WELCOME TO neptune TAG ]</color>\n <color=#07dde8>DONT MOD DIS PLS</color>\n<color=#ffff00>FOUNDER - claz neptune nexu</color>\n<color=#969696>CREDITS TO -claz</color>\n<color=#ff8800>https://discord.gg/H9qebHhzT</color>\n<color=#000000>CHANGE YOUR NAME From neptune#### AS IT'S BANNABLE!</color>",",
+        "MOTD": "<color=#bb29ff>[ WELCOME TO track TAG ]</color>\n <color=#07dde8>DONT MOD DIS PLS</color>\n<color=#ffff00>FOUNDER - azpect hypper forgotten </color>\n<color=#969696>CREDITS TO -azpect</color>\n<color=#ff8800>https://https://discord.gg/ys3qPw887</color>\n<color=#000000>CHANGE YOUR NAME From track#### AS IT'S BANNABLE!</color>",",
         "SeasonalStoreBoardSign": "<color=yellow>PLEASE RATE THE GAME 5 STARS!</color>\n\n<color=aqua>.GG/GAjy4aDbBa",
-        "TOS_2024.09.20": "https://discord.gg/H9qebHhzT",
-        "TOBAlreadyOwnCompTxt": "https://discord.gg/H9qebHhzT",
+        "TOS_2024.09.20": "https://discord.gg/ys3qPw887",
+        "TOBAlreadyOwnCompTxt": "https://discord.gg/ys3qPw887",
         "TOBAlreadyOwnPurchaseBundle": "RETRO",
-        "TOBDefCompTxt": "https://discord.gg/H9qebHhzT",
+        "TOBDefCompTxt": "https://discord.gg/ys3qPw887",
         "TOBDefPurchaseBtnDefTxt": "RETRO",
         "UseLegacyIAP": False
     }
